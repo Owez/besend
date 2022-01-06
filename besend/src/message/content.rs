@@ -1,5 +1,3 @@
-//! Messaging constructs
-
 use crate::{Error, FromBytes, Result, ToBytes};
 
 /// String length limit for filenames being sent over the network
