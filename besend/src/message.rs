@@ -8,7 +8,7 @@ const FILENAME_LIMIT: u16 = 512;
 /// String length limit for sound names being sent over the network
 const SOUNDNAME_LIMIT: u16 = 40;
 
-/// Represents each [Message] variant without any potential data as it's designator byte
+/// Represents each [MessageContent] variant without any potential data as it's designator byte
 macro_rules! message_byte {
     (Message::AdvertiseFile) => {
         0u8
@@ -20,12 +20,12 @@ macro_rules! message_byte {
 
 /// Internally constructed message, containing the message type and it's contents
 #[derive(Debug, PartialEq)]
-pub enum Message {
+pub enum MessageContent {
     AdvertiseFile(String),
     AdvertiseSound(String),
 }
 
-impl ToBytes for Message {
+impl ToBytes for MessageContent {
     fn to_bytes(&self) -> Result<Vec<u8>> {
         match self {
             Self::AdvertiseFile(filename) => {
@@ -42,7 +42,7 @@ impl ToBytes for Message {
     }
 }
 
-impl FromBytes for Message {
+impl FromBytes for MessageContent {
     fn from_bytes(bytes: impl IntoIterator<Item = u8>) -> Result<Self> {
         let mut bytes = bytes.into_iter();
         let designator = bytes.next().ok_or(Error::MessageEnded)?;
@@ -116,8 +116,14 @@ mod tests {
         let mut bytes = vec![0, 0, 7];
         bytes.extend(string.as_bytes());
 
-        assert_eq!(Message::AdvertiseFile(string.clone()).to_bytes()?, bytes);
-        assert_eq!(Message::from_bytes(bytes)?, Message::AdvertiseFile(string));
+        assert_eq!(
+            MessageContent::AdvertiseFile(string.clone()).to_bytes()?,
+            bytes
+        );
+        assert_eq!(
+            MessageContent::from_bytes(bytes)?,
+            MessageContent::AdvertiseFile(string)
+        );
         Ok(())
     }
 
@@ -125,7 +131,7 @@ mod tests {
     #[should_panic]
     fn file_ad_limit() {
         let payload = vec![0, 255, 255]; // 255 and 255 go to 65535, limit is less so this will error
-        Message::from_bytes(payload).unwrap();
+        MessageContent::from_bytes(payload).unwrap();
     }
 
     #[test]
@@ -135,8 +141,14 @@ mod tests {
         let mut bytes = vec![1, 0, 7];
         bytes.extend(string.as_bytes());
 
-        assert_eq!(Message::AdvertiseSound(string.clone()).to_bytes()?, bytes);
-        assert_eq!(Message::from_bytes(bytes)?, Message::AdvertiseSound(string));
+        assert_eq!(
+            MessageContent::AdvertiseSound(string.clone()).to_bytes()?,
+            bytes
+        );
+        assert_eq!(
+            MessageContent::from_bytes(bytes)?,
+            MessageContent::AdvertiseSound(string)
+        );
         Ok(())
     }
 
@@ -144,6 +156,6 @@ mod tests {
     #[should_panic]
     fn sound_ad_limit() {
         let payload = vec![0, 255, 255]; // 255 and 255 go to 65535, limit is less so this will error
-        Message::from_bytes(payload).unwrap();
+        MessageContent::from_bytes(payload).unwrap();
     }
 }

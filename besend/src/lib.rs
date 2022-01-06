@@ -2,7 +2,7 @@ mod errors;
 mod message;
 
 pub use errors::{Error, Result};
-pub use message::Message;
+pub use message::MessageContent;
 
 use uuid::Uuid;
 
