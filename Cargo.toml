@@ -1,0 +1,2 @@
+[workspace]
+members = ["besend", "besend-api", "besend-cli"]

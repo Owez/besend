@@ -1,0 +1,8 @@
+[package]
+name = "besend-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+argi = "0.1.0-beta.5"
+besend = { path = "../besend" }
