@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::{Error, FromBytes, Result, ToBytes};
 
 /// String length limit for filenames being sent over the network
@@ -14,6 +16,9 @@ macro_rules! message_byte {
     (Message::AdvertiseSound) => {
         1u8
     };
+    (Message::Interested) => {
+        2u8
+    };
 }
 
 /// Internally constructed message, containing the message type and it's contents
@@ -21,6 +26,7 @@ macro_rules! message_byte {
 pub enum MessageContent {
     AdvertiseFile(String),
     AdvertiseSound(String),
+    Interested(Uuid),
 }
 
 impl ToBytes for MessageContent {
@@ -34,6 +40,11 @@ impl ToBytes for MessageContent {
             Self::AdvertiseSound(soundname) => {
                 let mut bytes = vec![message_byte!(Message::AdvertiseSound)];
                 bytes.extend(LenString(soundname.clone()).to_bytes()?);
+                Ok(bytes)
+            }
+            Self::Interested(uuid) => {
+                let mut bytes = vec![message_byte!(Message::Interested)];
+                bytes.extend(uuid.as_bytes());
                 Ok(bytes)
             }
         }
@@ -54,8 +65,20 @@ impl FromBytes for MessageContent {
                 &mut bytes,
                 SOUNDNAME_LIMIT,
             )?)),
+            2 => Ok(Self::Interested(decode_uuid(&mut bytes)?)),
             unknown => Err(Error::UnknownMessage(unknown)),
         }
+    }
+}
+
+/// Decodes uuid from an unknown source
+fn decode_uuid(bytes: &mut impl Iterator<Item = u8>) -> Result<Uuid> {
+    const UUID_LEN: usize = 16;
+    let bytes: Vec<u8> = bytes.take(UUID_LEN).collect();
+    if bytes.len() != UUID_LEN {
+        Err(Error::MessageEnded)
+    } else {
+        Ok(Uuid::from_bytes(bytes.try_into().unwrap()))
     }
 }
 
@@ -69,7 +92,6 @@ impl LenString {
     ) -> Result<String> {
         let first = bytes.next().ok_or(Error::MessageEnded)?;
         let second = bytes.next().ok_or(Error::MessageEnded)?;
-
         let len = u16::from_be_bytes([first, second]);
 
         if let Some(limit) = limit.into() {
@@ -78,7 +100,7 @@ impl LenString {
             }
         }
 
-        let bytes: Vec<u8> = bytes.collect();
+        let bytes: Vec<u8> = bytes.take(len as usize).collect();
         if bytes.len() < len as usize {
             Err(Error::MessageEnded)
         } else {
