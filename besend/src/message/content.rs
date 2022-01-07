@@ -1,6 +1,5 @@
+use crate::{Error, FromBytes, Peer, Result, ToBytes, serialize::{LenString, decode_uuid, decode_u16}};
 use uuid::Uuid;
-
-use crate::{Error, FromBytes, Result, ToBytes};
 
 /// String length limit for sound names being sent over the network
 const SOUNDNAME_LIMIT: u16 = 40;
@@ -27,6 +26,8 @@ pub enum MessageContent {
     AdvertiseAvailability,
     /// Interested message relaying the advertisers id, as well as the pin code generated on the advertisers device
     Interested((Uuid, u16)),
+    /// Someone sent [MessageContent::AdvertiseAvailability] and we know information on another peer
+    WeKnow(Peer),
 }
 
 impl ToBytes for MessageContent {
@@ -44,6 +45,7 @@ impl ToBytes for MessageContent {
                 bytes.extend(pin.to_be_bytes());
                 Ok(bytes)
             }
+            Self::WeKnow(peer) => peer.to_bytes(),
         }
     }
 }
@@ -63,69 +65,13 @@ impl FromBytes for MessageContent {
                 decode_uuid(&mut bytes)?,
                 decode_u16(&mut bytes)?,
             ))),
+            3 => Ok(Self::WeKnow(Peer::from_bytes(bytes)?)),
             unknown => Err(Error::UnknownMessage(unknown)),
         }
     }
 }
 
-/// Decodes u16 from 2 bytes in iter
-fn decode_u16(bytes: &mut impl Iterator<Item = u8>) -> Result<u16> {
-    let first = bytes.next().ok_or(Error::MessageEnded)?;
-    let second = bytes.next().ok_or(Error::MessageEnded)?;
-    Ok(u16::from_be_bytes([first, second]))
-}
 
-/// Decodes uuid from an unknown source
-fn decode_uuid(bytes: &mut impl Iterator<Item = u8>) -> Result<Uuid> {
-    const UUID_LEN: usize = 16;
-    let bytes: Vec<u8> = bytes.take(UUID_LEN).collect();
-    if bytes.len() != UUID_LEN {
-        Err(Error::MessageEnded)
-    } else {
-        Ok(Uuid::from_bytes(bytes.try_into().unwrap()))
-    }
-}
-
-/// Helper for encoding/decoding strings sent over the network with their length defined as a big endian [u16] beforehand
-struct LenString(pub String);
-
-impl LenString {
-    fn decode(
-        bytes: &mut impl Iterator<Item = u8>,
-        limit: impl Into<Option<u16>>,
-    ) -> Result<String> {
-        let len = decode_u16(bytes)?;
-
-        if let Some(limit) = limit.into() {
-            if len > limit {
-                return Err(Error::StringLimit((limit, len)));
-            }
-        }
-
-        let bytes: Vec<u8> = bytes.take(len as usize).collect();
-        if bytes.len() < len as usize {
-            Err(Error::MessageEnded)
-        } else {
-            match String::from_utf8(bytes) {
-                Ok(string) => Ok(string),
-                Err(_) => Err(Error::InvalidString),
-            }
-        }
-    }
-}
-
-impl ToBytes for LenString {
-    fn to_bytes(&self) -> Result<Vec<u8>> {
-        let len = self.0.len();
-        if len > u16::MAX as usize {
-            return Err(Error::StringTooLong);
-        }
-
-        let mut lenstr = (len as u16).to_be_bytes().to_vec();
-        lenstr.extend(self.0.as_bytes());
-        Ok(lenstr)
-    }
-}
 
 #[cfg(test)]
 mod tests {

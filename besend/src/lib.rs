@@ -1,8 +1,10 @@
 mod errors;
 mod message;
+pub(crate) mod serialize;
 
 pub use errors::{Error, Result};
 pub use message::MessageContent;
+use serialize::{decode_uuid, Address};
 
 use crate::message::MessageSender;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
@@ -86,7 +88,26 @@ impl State {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Peer {
     pub id: Uuid,
     pub addr: SocketAddr,
+}
+
+impl ToBytes for Peer {
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut bytes = self.id.as_bytes().to_vec();
+        bytes.extend(Address(self.addr).to_bytes()?);
+        Ok(bytes)
+    }
+}
+
+impl FromBytes for Peer {
+    fn from_bytes(bytes: impl IntoIterator<Item = u8>) -> Result<Self> {
+        let mut bytes = bytes.into_iter();
+        Ok(Self {
+            id: decode_uuid(&mut bytes)?,
+            addr: Address::from_bytes(bytes)?.0,
+        })
+    }
 }
