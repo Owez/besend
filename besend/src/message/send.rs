@@ -7,11 +7,15 @@ pub struct MessageSender {
 }
 
 impl MessageSender {
-    pub fn new(peer: &Peer, content: MessageContent) -> Self {
+    pub fn to_peer(peer: &Peer, content: MessageContent) -> Self {
         Self {
             addr: peer.addr,
             content,
         }
+    }
+
+    pub fn to_addr(addr: SocketAddr, content: MessageContent) -> Self {
+        Self { addr, content }
     }
 
     pub fn send(&self, state: &State) -> Result<()> {

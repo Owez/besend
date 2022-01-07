@@ -1,14 +1,14 @@
 mod errors;
 mod message;
 
-use std::net::{SocketAddr, UdpSocket};
-
 pub use errors::{Error, Result};
 pub use message::MessageContent;
 
+use crate::message::MessageSender;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use uuid::Uuid;
 
-use crate::message::MessageSender;
+const PORT: u16 = 7767;
 
 /// General implementor for a `.to_bytes()` method which could error
 pub trait ToBytes {
@@ -35,17 +35,32 @@ impl State {
         })
     }
 
-    pub fn advertise_file(&self, _name: impl Into<String>) -> Result<()> {
-        todo!();
+    pub fn advertise_file(&self, name: impl Into<String>) -> Result<()> {
+        fn runner(state: &State, addr: SocketAddr, custom: &String) -> Result<()> {
+            MessageSender::to_addr(addr, MessageContent::AdvertiseFile(custom.clone())).send(state)
+        }
+        self.ip_looper(runner, name.into())
     }
 
-    pub fn advertise_sound(&self, _name: impl Into<String>) -> Result<()> {
-        todo!();
+    pub fn advertise_sound(&self, name: impl Into<String>) -> Result<()> {
+        fn runner(state: &State, addr: SocketAddr, custom: &String) -> Result<()> {
+            MessageSender::to_addr(addr, MessageContent::AdvertiseSound(custom.clone())).send(state)
+        }
+        self.ip_looper(runner, name.into())
     }
 
-    pub fn listen(&self, file: bool, sound: bool) -> Result<Peer> {
+    pub fn advertise_availability(&self) -> Result<()> {
+        fn runner(state: &State, addr: SocketAddr, _custom: &()) -> Result<()> {
+            MessageSender::to_addr(addr, MessageContent::AdvertiseAvailability).send(state)
+        }
+        self.ip_looper(runner, ())
+    }
+
+    pub fn listen(&self, active: bool, file: bool, sound: bool) -> Result<Peer> {
         if !file && !sound {
             return Err(Error::NotListening);
+        } else if active {
+            self.advertise_availability()?;
         }
 
         todo!()
@@ -54,11 +69,29 @@ impl State {
     pub fn connect(&self, peer: Peer, pin: impl Into<u16>) -> Result<()> {
         // send an interested message
         let msg_sender =
-            MessageSender::new(&peer, MessageContent::Interested((peer.id, pin.into())));
+            MessageSender::to_peer(&peer, MessageContent::Interested((peer.id, pin.into())));
         msg_sender.send(self)?;
 
         // wait for reply
         todo!()
+    }
+
+    /// Loops over local ip addresses (192.168.x.x) and triggers `run` on each
+    fn ip_looper<T>(
+        &self,
+        runner: impl Fn(&State, SocketAddr, &T) -> Result<()>,
+        custom: T,
+    ) -> Result<()> {
+        for outer in 0..u8::MAX {
+            for inner in 0..u8::MAX {
+                let addr = SocketAddr::V4(SocketAddrV4::new(
+                    Ipv4Addr::new(192, 168, outer, inner),
+                    PORT,
+                ));
+                runner(self, addr, &custom)?;
+            }
+        }
+        Ok(())
     }
 }
 
