@@ -35,13 +35,6 @@ impl State {
         })
     }
 
-    pub fn advertise_file(&self, name: impl Into<String>) -> Result<()> {
-        fn runner(state: &State, addr: SocketAddr, custom: &String) -> Result<()> {
-            MessageSender::to_addr(addr, MessageContent::AdvertiseFile(custom.clone())).send(state)
-        }
-        self.ip_looper(runner, name.into())
-    }
-
     pub fn advertise_sound(&self, name: impl Into<String>) -> Result<()> {
         fn runner(state: &State, addr: SocketAddr, custom: &String) -> Result<()> {
             MessageSender::to_addr(addr, MessageContent::AdvertiseSound(custom.clone())).send(state)
@@ -56,10 +49,8 @@ impl State {
         self.ip_looper(runner, ())
     }
 
-    pub fn listen(&self, active: bool, file: bool, sound: bool) -> Result<Peer> {
-        if !file && !sound {
-            return Err(Error::NotListening);
-        } else if active {
+    pub fn listen(&self, active: bool) -> Result<Peer> {
+        if active {
             self.advertise_availability()?;
         }
 

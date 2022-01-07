@@ -2,33 +2,25 @@ use uuid::Uuid;
 
 use crate::{Error, FromBytes, Result, ToBytes};
 
-/// String length limit for filenames being sent over the network
-const FILENAME_LIMIT: u16 = 512;
-
 /// String length limit for sound names being sent over the network
 const SOUNDNAME_LIMIT: u16 = 40;
 
 /// Represents each [MessageContent] variant without any potential data as it's designator byte
 macro_rules! message_byte {
-    (Message::AdvertiseFile) => {
+    (Message::AdvertiseSound) => {
         0u8
     };
-    (Message::AdvertiseSound) => {
+    (Message::AdvertiseAvailability) => {
         1u8
     };
-    (Message::AdvertiseAvailability) => {
-        2u8
-    };
     (Message::Interested) => {
-        3u8
+        2u8
     };
 }
 
 /// Internally constructed message, containing the message type and it's contents
 #[derive(Debug, PartialEq)]
 pub enum MessageContent {
-    /// Advertisement message for a file with provided filename/message
-    AdvertiseFile(String),
     /// Advertisement message for a sound with provided sound source message
     AdvertiseSound(String),
     /// Advertise your availability to pick up sources
@@ -40,11 +32,6 @@ pub enum MessageContent {
 impl ToBytes for MessageContent {
     fn to_bytes(&self) -> Result<Vec<u8>> {
         match self {
-            Self::AdvertiseFile(filename) => {
-                let mut bytes = vec![message_byte!(Message::AdvertiseFile)];
-                bytes.extend(LenString(filename.clone()).to_bytes()?);
-                Ok(bytes)
-            }
             Self::AdvertiseSound(soundname) => {
                 let mut bytes = vec![message_byte!(Message::AdvertiseSound)];
                 bytes.extend(LenString(soundname.clone()).to_bytes()?);
@@ -67,16 +54,12 @@ impl FromBytes for MessageContent {
         let designator = bytes.next().ok_or(Error::MessageEnded)?;
 
         match designator {
-            0 => Ok(Self::AdvertiseFile(LenString::decode(
-                &mut bytes,
-                FILENAME_LIMIT,
-            )?)),
-            1 => Ok(Self::AdvertiseSound(LenString::decode(
+            0 => Ok(Self::AdvertiseSound(LenString::decode(
                 &mut bytes,
                 SOUNDNAME_LIMIT,
             )?)),
-            2 => Ok(Self::AdvertiseAvailability),
-            3 => Ok(Self::Interested((
+            1 => Ok(Self::AdvertiseAvailability),
+            2 => Ok(Self::Interested((
                 decode_uuid(&mut bytes)?,
                 decode_u16(&mut bytes)?,
             ))),
@@ -147,31 +130,6 @@ impl ToBytes for LenString {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn file_ad_encode_decode() -> Result<()> {
-        let string = "abcdefg".to_string();
-
-        let mut bytes = vec![0, 0, 7];
-        bytes.extend(string.as_bytes());
-
-        assert_eq!(
-            MessageContent::AdvertiseFile(string.clone()).to_bytes()?,
-            bytes
-        );
-        assert_eq!(
-            MessageContent::from_bytes(bytes)?,
-            MessageContent::AdvertiseFile(string)
-        );
-        Ok(())
-    }
-
-    #[test]
-    #[should_panic]
-    fn file_ad_limit() {
-        let payload = vec![0, 255, 255]; // 255 and 255 go to 65535, limit is less so this will error
-        MessageContent::from_bytes(payload).unwrap();
-    }
 
     #[test]
     fn sound_ad_encode_decode() -> Result<()> {
