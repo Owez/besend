@@ -16,17 +16,25 @@ macro_rules! message_byte {
     (Message::AdvertiseSound) => {
         1u8
     };
-    (Message::Interested) => {
+    (Message::AdvertiseAvailability) => {
         2u8
+    };
+    (Message::Interested) => {
+        3u8
     };
 }
 
 /// Internally constructed message, containing the message type and it's contents
 #[derive(Debug, PartialEq)]
 pub enum MessageContent {
+    /// Advertisement message for a file with provided filename/message
     AdvertiseFile(String),
+    /// Advertisement message for a sound with provided sound source message
     AdvertiseSound(String),
-    Interested(Uuid),
+    /// Advertise your availability to pick up sources
+    AdvertiseAvailability,
+    /// Interested message relaying the advertisers id, as well as the pin code generated on the advertisers device
+    Interested((Uuid, u16)),
 }
 
 impl ToBytes for MessageContent {
@@ -42,9 +50,11 @@ impl ToBytes for MessageContent {
                 bytes.extend(LenString(soundname.clone()).to_bytes()?);
                 Ok(bytes)
             }
-            Self::Interested(uuid) => {
+            Self::AdvertiseAvailability => Ok(vec![message_byte!(Message::AdvertiseAvailability)]),
+            Self::Interested((uuid, pin)) => {
                 let mut bytes = vec![message_byte!(Message::Interested)];
                 bytes.extend(uuid.as_bytes());
+                bytes.extend(pin.to_be_bytes());
                 Ok(bytes)
             }
         }
@@ -65,10 +75,21 @@ impl FromBytes for MessageContent {
                 &mut bytes,
                 SOUNDNAME_LIMIT,
             )?)),
-            2 => Ok(Self::Interested(decode_uuid(&mut bytes)?)),
+            2 => Ok(Self::AdvertiseAvailability),
+            3 => Ok(Self::Interested((
+                decode_uuid(&mut bytes)?,
+                decode_u16(&mut bytes)?,
+            ))),
             unknown => Err(Error::UnknownMessage(unknown)),
         }
     }
+}
+
+/// Decodes u16 from 2 bytes in iter
+fn decode_u16(bytes: &mut impl Iterator<Item = u8>) -> Result<u16> {
+    let first = bytes.next().ok_or(Error::MessageEnded)?;
+    let second = bytes.next().ok_or(Error::MessageEnded)?;
+    Ok(u16::from_be_bytes([first, second]))
 }
 
 /// Decodes uuid from an unknown source
@@ -90,9 +111,7 @@ impl LenString {
         bytes: &mut impl Iterator<Item = u8>,
         limit: impl Into<Option<u16>>,
     ) -> Result<String> {
-        let first = bytes.next().ok_or(Error::MessageEnded)?;
-        let second = bytes.next().ok_or(Error::MessageEnded)?;
-        let len = u16::from_be_bytes([first, second]);
+        let len = decode_u16(bytes)?;
 
         if let Some(limit) = limit.into() {
             if len > limit {

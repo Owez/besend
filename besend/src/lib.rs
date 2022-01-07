@@ -51,9 +51,10 @@ impl State {
         todo!()
     }
 
-    pub fn connect(&self, peer: Peer) -> Result<()> {
+    pub fn connect(&self, peer: Peer, pin: impl Into<u16>) -> Result<()> {
         // send an interested message
-        let msg_sender = MessageSender::new(&peer, MessageContent::Interested(peer.id));
+        let msg_sender =
+            MessageSender::new(&peer, MessageContent::Interested((peer.id, pin.into())));
         msg_sender.send(self)?;
 
         // wait for reply
